@@ -29,8 +29,7 @@ type
     MemDataS = 0x500f
     LatestDataL = 0x5021
     LatestDataS = 0x5022
-  LatestData* = object
-    sequenceNo*: uint8
+  DataShort* = object
     temperature*: float
     humidity*: float
     light*: int16
@@ -40,6 +39,9 @@ type
     eCos*: int16
     discomfort*: float
     heat_stroke*: float
+  LatestDataS* = object
+    sequenceNo*: uint8
+    data*: DataShort
 
 const HEADER = "\x52\x42"
 
@@ -130,24 +132,30 @@ proc send_recv(self: SensorDev, frame: string): Option[string] =
 #-------------------------------------------------------------------------------
 #
 #-------------------------------------------------------------------------------
-proc get_latest_data_short*(self: SensorDev): Option[LatestData] =
+proc decode_data_short(payload: string): DataShort =
+  result.temperature = get_int16(payload, 0).float * 0.01
+  result.humidity = get_int16(payload, 2).float * 0.01
+  result.light = get_int16(payload, 4)
+  result.pressure = get_int32(payload, 6).float * 0.001
+  result.noise = get_int16(payload, 10).float * 0.01
+  result.eTVOC = get_int16(payload, 12)
+  result.eCos = get_int16(payload, 14)
+  result.discomfort = get_int16(payload, 16).float * 0.01
+  result.heat_stroke = get_int16(payload, 18).float * 0.01
+
+#-------------------------------------------------------------------------------
+#
+#-------------------------------------------------------------------------------
+proc get_latest_data_short*(self: SensorDev): Option[LatestDataS] =
   let packet = gen_frame(Cmd.Read, DataAddr.LatestDataS, "")
   let res = self.send_recv(packet)
   if res.isNone:
-    return none(LatestData)
+    return none(LatestDataS)
   let payload = res.get
-  var data: LatestData
-  data.sequenceNo = payload[0].uint8
-  data.temperature = get_int16(payload, 1).float * 0.01
-  data.humidity = get_int16(payload, 3).float * 0.01
-  data.light = get_int16(payload, 5)
-  data.pressure = get_int32(payload, 7).float * 0.001
-  data.noise = get_int16(payload, 11).float * 0.01
-  data.eTVOC = get_int16(payload, 13)
-  data.eCos = get_int16(payload, 15)
-  data.discomfort = get_int16(payload, 17).float * 0.01
-  data.heat_stroke = get_int16(payload, 19).float * 0.01
-  result = some(data)
+  var data_s: LatestDataS
+  data_s.sequenceNo = payload[0].uint8
+  data_s.data = decode_data_short(payload[1..^1])
+  result = some(data_s)
 
 
 when isMainModule:
