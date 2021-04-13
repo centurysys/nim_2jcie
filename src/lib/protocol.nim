@@ -112,22 +112,34 @@ proc gen_frame(cmd: Cmd, address: DataAddr, data: string): string =
 #-------------------------------------------------------------------------------
 #
 #-------------------------------------------------------------------------------
-proc send_recv(self: SensorDev, frame: string): Option[string] =
-  let sendlen = self.ser.write(frame)
-  if sendlen != frame.len:
-    return none(string)
+proc recv(self: SensorDev): Option[string] =
   let header = self.ser.read(4)
   if header[0..1] != HEADER:
     return none(string)
-  let restlen = (header[3].int32 shl 8) or (header[2].int32)
+  let restlen = get_int16(header, 2).int32
   let rest = self.ser.read(restlen)
   let received = header & rest
-  if received[4].char != Resp.Read.char:
+  if not (received[4].char in [Resp.Read.char, Resp.Write.char]):
     return none(string)
   let crc_calc = calc_CRC16(received[0..^3].toSeq)
-  let crc_pkt = (received[^1].uint16 shl 8) or received[^2].uint16
+  let crc_pkt = get_uint16(received, received.len - 2)
   if crc_calc == crc_pkt:
     result = some(received[7..^3])
+
+#-------------------------------------------------------------------------------
+#
+#-------------------------------------------------------------------------------
+proc send(self: SensorDev, frame: string): bool =
+  let sendlen = self.ser.write(frame)
+  result = if sendlen == frame.len: true else: false
+
+#-------------------------------------------------------------------------------
+#
+#-------------------------------------------------------------------------------
+proc send_recv(self: SensorDev, frame: string): Option[string] =
+  if not self.send(frame):
+    return none(string)
+  result = self.recv()
 
 #-------------------------------------------------------------------------------
 #
