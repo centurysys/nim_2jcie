@@ -51,7 +51,7 @@ type
   # 0x500f
   MemDataShort* = object
     memIdx*: uint32
-    timecounter*: uint64
+    timecounter*: Time
     data*: DataShort
   # 0x5022
   LatestDataS* = object
@@ -203,29 +203,37 @@ proc get_memory_information*(self: SensorDev): Option[MemoryInfo] =
 #-------------------------------------------------------------------------------
 # Cmd: Get Memory Data Short (0x500f)
 #-------------------------------------------------------------------------------
-proc get_memory_data_short*(self: SensorDev, idxStart, idxEnd: uint32): Option[seq[MemDataShort]] =
-  var data: seq[MemDataShort]
-  let memIdx_opt = self.get_memory_information()
-  if memIdx_opt.isNone:
-    return none(seq[MemDataShort])
-  let idxLast = memIdx_opt.get.IdxLast
-  let idxLatest = memIdx_opt.get.IdxLatest
-  if idxLast == 0 or idxLatest == 0:
-    # recording not started
-    return some(data)
-  if idxStart < idxLast or idxEnd > idxLatest:
-    return none(seq[MemDataShort])
-  var cmd_payload = newString(8)
-  littleEndian32(addr cmd_payload[0], unsafeAddr idxStart)
-  littleEndian32(addr cmd_payload[4], unsafeAddr idxEnd)
-  let packet = gen_frame(Cmd.Read, DataAddr.MemDataS, cmd_payload)
-  if not self.send(packet):
-    return none(seq[MemDataShort])
-  let datacnt = (idxEnd - idxStart) + 1
-  for i in 0..<datacnt:
-    let res = self.recv()
-    echo &"get_memory_data_short -> length: {res.get.len}"
-  return some(data)
+iterator get_memory_data_short*(self: SensorDev, idxStart, idxEnd: uint32): MemDataShort =
+  block:
+    let memIdx_opt = self.get_memory_information()
+    if memIdx_opt.isNone:
+      break
+    let idxLast = memIdx_opt.get.IdxLast
+    let idxLatest = memIdx_opt.get.IdxLatest
+    if idxLast == 0 or idxLatest == 0:
+      # recording not started
+      break
+    if idxStart < idxLast or idxEnd > idxLatest or idxStart >= idxEnd:
+      break
+    var cmd_payload = newString(8)
+    var iStart = idxStart
+    var iEnd = idxEnd
+    littleEndian32(addr cmd_payload[0], addr iStart)
+    littleEndian32(addr cmd_payload[4], addr iEnd)
+    let packet = gen_frame(Cmd.Read, DataAddr.MemDataS, cmd_payload)
+    if not self.send(packet):
+      break
+    let datacnt = (idxEnd - idxStart) + 1
+    for i in 0..<datacnt:
+      let res = self.recv()
+      let payload = res.get
+      var data: MemDataShort
+      littleEndian32(addr data.memIdx, unsafeAddr payload[0])
+      var tc: int64
+      littleEndian64(addr tc, unsafeAddr payload[4])
+      data.timecounter = fromUnix(tc)
+      data.data = decode_data_short(payload[12..^1])
+      yield data
 
 #-------------------------------------------------------------------------------
 # Cmd: Get Latest Data Short (0x5022)
@@ -271,7 +279,7 @@ proc set_time_setting*(self: SensorDev): Option[bool] =
 when isMainModule:
   import json
 
-  let port = "ttyUSB3"
+  let port = "ttyUSB0"
   let sensor = open_2jcie(port)
   # 0x5202: TimeSetting
   let ts_opt = sensor.get_time_setting()
@@ -279,17 +287,20 @@ when isMainModule:
     let ts = ts_opt.get
     let datetime = ts.fromUnix.format("yyyy/MM/dd HH:mm:ss")
     echo &"Timestamp: {datetime}"
-    let ts_set_opt = sensor.set_time_setting()
-    if ts_set_opt.isSome:
-      echo &"Timestamp set OK"
+    # start logging
+    #let ts_set_opt = sensor.set_time_setting()
+    #if ts_set_opt.isSome:
+    #  echo &"Timestamp set OK"
   # 0x5004
   let memInfo_opt = sensor.get_memory_information()
   if memInfo_opt.isSome:
     let memInfo = memInfo_opt.get
     echo &"MemoryIndex: Last: {memInfo.IdxLast}, Latest: {memInfo.IdxLatest}"
-    let idx_start = memInfo.IdxLast
-    let idx_end = 100'u32
-    discard sensor.get_memory_data_short(idx_start, idx_end)
+    var idx_start = memInfo.IdxLatest.int32 - 100 + 1
+    if idx_start < 1:
+      idx_start = 1
+    for data in sensor.get_memory_data_short(idx_start.uint32, memInfo.IdxLatest):
+      echo data
   let data_opt = sensor.get_latest_data_short()
   if data_opt.isSome:
     echo (%data_opt.get).pretty()
