@@ -91,7 +91,7 @@ proc cmd_get_memory_data(self: SensorDev, idxStart, idxEnd: uint32,
         let header = "# timestamp, " & keys.join(", ")
         echo header
       var vals = newSeqOfCap[string](keys.len)
-      vals.add(data.timecounter.format("yyyy-MM-dd'_'hh:mm:ss"))
+      vals.add(data.timecounter.format("yyyy-MM-dd'T'HH:mm:ss"))
       for key in keys:
         let val = data_json[key].getFloat
         vals.add(&"{val}")
