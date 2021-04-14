@@ -12,3 +12,4 @@ bin           = @["nim_2jcie"]
 
 requires "nim >= 1.4.4"
 requires "serial >= 1.1.4"
+requires "argparse == 0.10.1"
