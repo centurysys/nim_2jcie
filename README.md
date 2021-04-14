@@ -34,7 +34,7 @@ Nim で記述しているので、nimble でビルドします。
 ### 保存件数取得
 
     root@plum:~# nim_2jcie -p ttyUSB0 get_meminfo
-    Data in Memory: Last: 1 => Latest: 2
+    Data in Memory: Last: 1 => Latest: 20583
 
 #### 保存されているデータ取得
 
@@ -57,3 +57,35 @@ Nim で記述しているので、nimble でビルドします。
     2021-04-13T09:27:09, 26.48, 37.29, 710.0, 1016.567, 57.69, 35.0, 634.0, 72.19, 20.8
     2021-04-13T09:27:10, 26.46, 37.31, 710.0, 1016.569, 57.3, 36.0, 641.0, 72.17, 20.78
     2021-04-13T09:27:11, 26.48, 37.27, 712.0, 1016.572, 57.14, 38.0, 652.0, 72.18000000000001, 20.8
+
+<br/>
+
+### 応用
+
+#### SORACOM Harvest Data に送信する
+
+##### UDP
+    root@plum:~# nim_2jcie -p ttyUSB0 get_latest|ncat -u harvest.soracom.io 8514
+
+##### HTTP (curl 使用)
+
+    root@plum:~# curl -v --data `nim_2jcie -p ttyUSB0 get_latest` harvest.soracom.io
+    *   Trying 100.127.111.111:80...
+    * TCP_NODELAY set
+    * Connected to harvest.soracom.io (100.127.111.111) port 80 (#0)
+    > POST / HTTP/1.1
+    > Host: harvest.soracom.io
+    > User-Agent: curl/7.68.0
+    > Accept: */*
+    > Content-Length: 154
+    > Content-Type: application/x-www-form-urlencoded
+    > 
+    * upload completely sent off: 154 out of 154 bytes
+    * Mark bundle as not supporting multiuse
+    < HTTP/1.1 201 Created
+    < Date: Wed, 14 Apr 2021 02:50:08 GMT
+    < Content-Length: 0
+    < Connection: close
+    < 
+    * Closing connection 0
+    root@plum:~# 
