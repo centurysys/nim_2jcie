@@ -19,7 +19,7 @@ type
     ReadErr = 0x81
     WriteErr = 0x82
     Unknown = 0xff
-  ErrCode {.pure.} = enum
+  ErrCode* {.pure.} = enum
     Crc = 0x01
     Cmd = 0x02
     Address = 0x03
@@ -226,10 +226,12 @@ iterator get_memory_data_short*(self: SensorDev, idxStart, idxEnd: uint32): MemD
     let datacnt = (idxEnd - idxStart) + 1
     for i in 0..<datacnt:
       let res = self.recv()
+      if res.isNone:
+        break
       let payload = res.get
       var data: MemDataShort
-      littleEndian32(addr data.memIdx, unsafeAddr payload[0])
       var tc: int64
+      littleEndian32(addr data.memIdx, unsafeAddr payload[0])
       littleEndian64(addr tc, unsafeAddr payload[4])
       data.timecounter = fromUnix(tc)
       data.data = decode_data_short(payload[12..^1])
